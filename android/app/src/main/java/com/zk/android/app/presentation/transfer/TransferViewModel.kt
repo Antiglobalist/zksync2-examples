@@ -14,6 +14,7 @@ import org.orbitmvi.orbit.container
 import org.orbitmvi.orbit.syntax.simple.intent
 import org.orbitmvi.orbit.syntax.simple.postSideEffect
 import org.orbitmvi.orbit.syntax.simple.reduce
+import org.orbitmvi.orbit.syntax.simple.runOn
 import javax.inject.Inject
 
 @HiltViewModel
@@ -54,22 +55,23 @@ internal class TransferViewModel @Inject constructor(
     }
 
     private fun processClickSend(action: Action.ClickSend) = intent {
-        val currentState = state as? ViewState.Data ?: return@intent
-        val amount = action.amount
-        reduce {
-            currentState.copy(
-                balance = currentState.balance.copy(fromWalletModel = FromWalletViewModel(amount.toString())),
-                inProgress = true
+        runOn(ViewState.Data::class) {
+            val amount = action.amount
+            reduce {
+                state.copy(
+                    balance = state.balance.copy(fromWalletModel = FromWalletViewModel(amount.toString())),
+                    inProgress = true
+                )
+            }
+            val result = depositUseCase.deposit(action.amount).getOrElse {
+                reduce { ViewState.Connection.Error }
+                return@runOn
+            }
+            val state = ViewState.Data(
+                mapper.map(result.newBalance)
             )
+            reduce { state }
+            postSideEffect(ViewEffect.ShowToast(R.string.deposit_completed))
         }
-        val result = depositUseCase.deposit(action.amount).getOrElse {
-            reduce { ViewState.Connection.Error }
-            return@intent
-        }
-        val state = ViewState.Data(
-            mapper.map(result.newBalance)
-        )
-        reduce { state }
-        postSideEffect(ViewEffect.ShowToast(R.string.deposit_completed))
     }
 }
